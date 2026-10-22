@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Quick Look extensions must be sandboxed. No network entitlement: the extension cannot go online. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Read-only access so images next to the Markdown file (e.g. ./images/logo.png) can be shown. -->
+	<key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+	<array>
+		<string>/</string>
+	</array>
+</dict>
+</plist>
