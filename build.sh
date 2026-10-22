@@ -62,6 +62,25 @@ unregister_all() {
   wait_for_registration no || echo "warning: the system still lists an old copy of the extension" >&2
 }
 
+# Unregisters copies of the extension other than the installed one (e.g. from a moved
+# or deleted checkout), then waits until the system has dropped them.
+remove_other_copies() {
+  local found=no
+  while IFS= read -r path; do
+    [ "$path" = "$DEST_EXT" ] && continue
+    pluginkit -r "$path" 2>/dev/null || true
+    "$LSREGISTER" -u "${path%/Contents/PlugIns/*}" 2>/dev/null || true
+    found=yes
+  done < <(registered_paths)
+  [ "$found" = yes ] || return 0
+  local others
+  for _ in $(seq 1 20); do
+    others="$(registered_paths | grep -vxF "$DEST_EXT" || true)"
+    [ -z "$others" ] && return 0
+    sleep 0.5
+  done
+}
+
 if [ "${1:-}" = "uninstall" ]; then
   unregister_all
   reset_quicklook
@@ -145,21 +164,30 @@ codesign --force --sign "$IDENTITY" --options runtime --timestamp=none "$APP"
 codesign --verify --strict --deep "$APP"
 
 echo "==> Installing to $DEST"
-unregister_all
-ditto "$APP" "$DEST"
+remove_other_copies
+pkill -f "MarkdownPreview.appex/Contents/MacOS/MarkdownPreview" 2>/dev/null || true
+if [ -d "$DEST" ]; then
+  # Update in place. Deleting the old app first makes macOS unregister the extension in
+  # the background, which can undo the new registration a few seconds later.
+  rsync -a --checksum --delete "$APP/" "$DEST/"
+else
+  ditto "$APP" "$DEST"
+fi
+codesign --verify --strict --deep "$DEST"
 rm -rf "$WORK"
-"$LSREGISTER" -f -R "$DEST"
 
 # Register, then confirm it is still registered a moment later.
 registered=no
-for attempt in 1 2 3; do
+for attempt in 1 2 3 4 5; do
+  "$LSREGISTER" -f -R "$DEST"
   pluginkit -a "$DEST_EXT"
   pluginkit -e use -i "$EXT_ID"
   if wait_for_registration yes; then
     sleep 2
     if is_registered; then registered=yes; break; fi
   fi
-  echo "    registration didn't stick, retrying ($attempt)"
+  echo "    waiting for macOS to register the extension ($attempt)"
+  sleep 3
 done
 if [ "$registered" != yes ]; then
   echo "error: macOS did not register the Quick Look extension" >&2
