@@ -64,7 +64,7 @@ has 'AT&amp;T'
 has '<br />'
 has '<h6>Small heading</h6>'
 has "img-src cid: data:"
-grep -q "image: $S/images/my dot.png" "$OUT/stderr" || { echo "  FAIL [$CASE] space path not resolved"; fails=$((fails+1)); }
+grep -qE "^image: .*/Tests/samples/images/my dot\.png$" "$OUT/stderr" || { echo "  FAIL [$CASE] space path not resolved"; fails=$((fails+1)); }
 
 CASE=front-matter; render front-matter.md
 has '<pre class="front-matter"><code>title: &quot;Front &lt;matter&gt;&quot;
