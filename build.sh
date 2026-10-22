@@ -113,14 +113,25 @@ cp "$CMARK/COPYING" "$APP/Contents/Resources/cmark-gfm-LICENSE.txt"
 
 echo "==> Compiling app icon"
 # Assets.car holds the light/dark/tinted icon (macOS 26+); AppIcon.icns covers older systems.
-# Absolute paths: actool runs as a shared server and resolves relative ones against its own cwd.
-icon_log="$(xcrun actool "$ROOT/Sources/App/AppIcon.icon" --compile "$APP/Contents/Resources" \
-  --platform macosx --target-device mac --minimum-deployment-target 12.0 --app-icon AppIcon \
-  --output-partial-info-plist "$WORK/icon-info.plist" --errors --warnings --output-format human-readable-text 2>&1)" || true
-if [ ! -f "$APP/Contents/Resources/Assets.car" ] || [ ! -f "$APP/Contents/Resources/AppIcon.icns" ]; then
-  echo "$icon_log" >&2
-  echo "error: app icon was not compiled" >&2
-  exit 1
+# actool hands the work to a shared background server (ibtoold). That server can get stuck
+# returning an old error to every later build, so each attempt starts a fresh one and shuts
+# it down afterwards. Paths are absolute because the server has its own working directory.
+compile_icon() {
+  xcrun actool --quit-all-idle-servers >/dev/null 2>&1 || true
+  icon_log="$(xcrun actool "$ROOT/Sources/App/AppIcon.icon" --compile "$APP/Contents/Resources" \
+    --platform macosx --target-device mac --minimum-deployment-target 12.0 --app-icon AppIcon \
+    --output-partial-info-plist "$WORK/icon-info.plist" --errors --warnings --output-format human-readable-text 2>&1)" || true
+  xcrun actool --quit-all-idle-servers >/dev/null 2>&1 || true
+  [ -f "$APP/Contents/Resources/Assets.car" ] && [ -f "$APP/Contents/Resources/AppIcon.icns" ]
+}
+if ! compile_icon; then
+  echo "    icon compile failed, retrying"
+  sleep 1
+  if ! compile_icon; then
+    echo "$icon_log" >&2
+    echo "error: app icon was not compiled" >&2
+    exit 1
+  fi
 fi
 
 strip -x "$EXT/Contents/MacOS/MarkdownPreview" "$APP/Contents/MacOS/MarkdownPreview"
